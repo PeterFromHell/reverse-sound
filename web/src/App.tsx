@@ -10,6 +10,7 @@ function App() {
     reverseAudio,
     playAudio,
     stopPlayback,
+    downloadAudio,
     analyser
   } = useAudio();
 
@@ -66,6 +67,15 @@ function App() {
             disabled={!state.hasAudio || state.isRecording}
           >
             {state.isPlaying ? 'Stop Playing' : 'Play'}
+          </button>
+
+          <button
+            className="download"
+            onClick={downloadAudio}
+            disabled={!state.hasAudio || state.isRecording}
+            style={{ borderColor: 'rgba(255, 255, 255, 0.3)' }}
+          >
+            Download
           </button>
         </div>
 

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { bufferToWav } from '../utils/wavEncoder';
 
 export interface AudioState {
   isRecording: boolean;
@@ -42,7 +43,7 @@ export const useAudio = () => {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
+
       // Setup Analyser for visualization during recording
       if (audioContextRef.current && analyserRef.current) {
         const source = audioContextRef.current.createMediaStreamSource(stream);
@@ -60,7 +61,7 @@ export const useAudio = () => {
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks, { type: 'audio/webm' });
         await processAudio(blob);
-        
+
         // Stop all tracks to release microphone
         stream.getTracks().forEach(track => track.stop());
       };
@@ -81,15 +82,15 @@ export const useAudio = () => {
 
   const processAudio = async (blob: Blob) => {
     if (!audioContextRef.current) return;
-    
+
     const arrayBuffer = await blob.arrayBuffer();
     const decodedBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
     audioBufferRef.current = decodedBuffer;
-    
-    setState(prev => ({ 
-      ...prev, 
-      hasAudio: true, 
-      duration: decodedBuffer.duration 
+
+    setState(prev => ({
+      ...prev,
+      hasAudio: true,
+      duration: decodedBuffer.duration
     }));
   };
 
@@ -97,12 +98,12 @@ export const useAudio = () => {
     if (!audioBufferRef.current) return;
 
     const buffer = audioBufferRef.current;
-    
+
     // Reverse logic for each channel
     for (let i = 0; i < buffer.numberOfChannels; i++) {
-        const channelData = buffer.getChannelData(i);
-        // In-place reverse
-        channelData.reverse(); 
+      const channelData = buffer.getChannelData(i);
+      // In-place reverse
+      channelData.reverse();
     }
 
     setState(prev => ({ ...prev })); // Trigger re-render if needed
@@ -113,20 +114,20 @@ export const useAudio = () => {
 
     // Stop if currently playing
     if (sourceNodeRef.current) {
-        try {
-            sourceNodeRef.current.stop();
-        } catch(e) { /* ignore */ }
+      try {
+        sourceNodeRef.current.stop();
+      } catch (e) { /* ignore */ }
     }
 
     const source = audioContextRef.current.createBufferSource();
     source.buffer = audioBufferRef.current;
-    
+
     // Connect to analyser for playback visualization
     if (analyserRef.current) {
-        source.connect(analyserRef.current);
-        analyserRef.current.connect(audioContextRef.current.destination);
+      source.connect(analyserRef.current);
+      analyserRef.current.connect(audioContextRef.current.destination);
     } else {
-        source.connect(audioContextRef.current.destination);
+      source.connect(audioContextRef.current.destination);
     }
 
     source.onended = () => {
@@ -137,29 +138,49 @@ export const useAudio = () => {
     sourceNodeRef.current = source;
     source.start(0);
     startTimeRef.current = audioContextRef.current.currentTime;
-    
+
     setState(prev => ({ ...prev, isPlaying: true }));
     updateProgress();
   };
 
   const stopPlayback = () => {
     if (sourceNodeRef.current) {
-        try {
-            sourceNodeRef.current.stop();
-        } catch (e) { /* already stopped */ }
-        setState(prev => ({ ...prev, isPlaying: false }));
+      try {
+        sourceNodeRef.current.stop();
+      } catch (e) { /* already stopped */ }
+      setState(prev => ({ ...prev, isPlaying: false }));
     }
   };
 
   const updateProgress = () => {
     if (!audioContextRef.current) return;
-    
+
     const elapsed = audioContextRef.current.currentTime - startTimeRef.current;
     setState(prev => ({ ...prev, currentTime: elapsed }));
-    
+
     if (elapsed < (audioBufferRef.current?.duration || 0)) {
-        animationFrameRef.current = requestAnimationFrame(updateProgress);
+      animationFrameRef.current = requestAnimationFrame(updateProgress);
     }
+  };
+
+  const downloadAudio = () => {
+    if (!audioBufferRef.current) return;
+
+    const blob = bufferToWav(audioBufferRef.current);
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = 'reversed-audio.wav';
+    document.body.appendChild(a);
+    a.click();
+
+    // Cleanup
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
   };
 
   return {
@@ -169,6 +190,7 @@ export const useAudio = () => {
     reverseAudio,
     playAudio,
     stopPlayback,
+    downloadAudio,
     analyser: analyserRef.current
   };
 };
